@@ -185,11 +185,69 @@
     // 4.diff算法
   }
 
+  let id$1 = 0;
+  // dep.subs = [watcher]
+  // watcher.deps = [dep]
+  class Dep {
+    constructor() {
+      // 把watcher 放到dep
+      this.subs = [];
+      this.id = id$1++;
+    }
+    depend() {
+      // 要给watcher 也加一个标识，防止重复
+      // 让dep记住这个watcher watcher还要记住dep 相互关系
+      Dep.target.addDep(this); // 在watcher中在调用addSub方法
+    }
+    addSub(watcher) {
+      this.subs.push(watcher);
+    }
+    notify() {
+      this.subs.forEach((watcher) => watcher.updata());
+    }
+  }
+  Dep.target = null; // 这里是一个全局的变量 window.target 静态属性
+
+  let id = 0;
+  class Watcher {
+    constructor(vm, fn, cb, options) {
+      this.vm = vm;
+      this.fn = fn;
+      this.cb = cb;
+      this.options = options;
+      this.id = id++;
+      this.depsId = new Set();
+      this.deps = [];
+
+      this.getter = fn; // fn就是页面渲染逻辑
+      this.get();
+    }
+    addDep(dep) {
+      let did = dep.id;
+      if (!this.depsId.has(did)) {
+        this.depsId.add(did);
+        this.deps.push(dep);
+        dep.addSub(this);
+      }
+    }
+    get() {
+      // debugger
+      Dep.target = this; // window.target = watcher
+      this.getter(); // 页面渲染逻辑
+      Dep.target = null; // 渲染完毕后，就将标识清空了，只有在渲染的时候才会进行依赖收集
+    }
+    updata() {
+      console.log('updata');
+      this.get();
+    }
+  }
+
   function patch(el, vnode) {
     const elm = createElm(vnode); // 根据虚拟节点创造了真实节点
     const parentNode = el.parentNode;
     parentNode.insertBefore(elm, el.nextSibling);
     parentNode.removeChild(el);
+    return elm
   }
 
   function createElm(vnode) {
@@ -216,7 +274,18 @@
   }
 
   function mountComponent(vm) {
-    vm._updata(vm._render());
+    let updataComponent = () => {
+      vm._updata(vm._render());
+    };
+
+    new Watcher(
+      vm,
+      updataComponent,
+      () => {
+        console.log('后续增添更新钩子函数 updata');
+      },
+      true
+    );
   }
 
   function lifeCycleMixin(Vue) {
@@ -323,16 +392,22 @@
   function defineReactive(obj, key, value) {
     observe(value); // 递归进行观测数据. 不管有多少层,我都进行defineProperty
     // vue2 慢的原因 主要在这个方法中
+    let dep = new Dep(); // 每个属性都增加一个dep
     Object.defineProperty(obj, key, {
       get() {
+        // debugger
+        if (Dep.target) {
+          dep.depend();
+        }
         return value // 闭包, 此value 会像上层的value进行查找
       },
       set(newValue) {
         // 如果设置的是一个对象,那么会再次进行劫持
         if (newValue === value) return
         observe(newValue);
-        console.log('修改');
+        // console.log('修改')
         value = newValue;
+        dep.notify();
       }
     });
   }

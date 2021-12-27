@@ -9,7 +9,8 @@
   <body>
     <div id="app">
       <p>{{msg}}</p>
-      <span>123456</span>
+      <p>{{msg}}</p>
+      <p>{{msg}}</p>
       <p>{{age}}</p>
     </div>
     <script src="./vue.js"></script>
@@ -18,13 +19,15 @@
         el: '#app',
         data() {
           return {
-            msg: 'hello',
+            msg: 'hello1',
+            abc: 'abc',
             age: {
               a: 10
             }
           }
         }
       })
+      vm.msg = '123'
     </script>
   </body>
 </html>

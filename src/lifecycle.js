@@ -1,7 +1,19 @@
+import Watcher from './observe/watcher'
 import { patch } from './vdom/patch'
 
 export function mountComponent(vm) {
-  vm._updata(vm._render())
+  let updataComponent = () => {
+    vm._updata(vm._render())
+  }
+
+  new Watcher(
+    vm,
+    updataComponent,
+    () => {
+      console.log('后续增添更新钩子函数 updata')
+    },
+    true
+  )
 }
 
 export function lifeCycleMixin(Vue) {
