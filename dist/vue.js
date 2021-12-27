@@ -189,8 +189,7 @@
     const elm = createElm(vnode); // 根据虚拟节点创造了真实节点
     const parentNode = el.parentNode;
     parentNode.insertBefore(elm, el.nextSibling);
-    console.log(parentNode);
-    parentNode.removeChild(elm);
+    parentNode.removeChild(el);
   }
 
   function createElm(vnode) {
