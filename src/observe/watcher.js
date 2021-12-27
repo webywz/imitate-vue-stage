@@ -11,7 +11,7 @@ class Watcher {
     this.deps = []
 
     this.getter = fn // fn就是页面渲染逻辑
-    this.get()
+    this.get() // 表示上来后就做一次初始化
   }
   addDep(dep) {
     let did = dep.id
