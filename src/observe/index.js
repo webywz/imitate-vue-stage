@@ -54,6 +54,7 @@ function defineReactive(obj, key, value) {
       }
       return value // 闭包, 此value 会像上层的value进行查找
     },
+    // 一个属性可能对应多个watcher， 数组也有更新
     set(newValue) {
       // 如果设置的是一个对象,那么会再次进行劫持
       if (newValue === value) return

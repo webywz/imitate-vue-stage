@@ -27,7 +27,11 @@
           }
         }
       })
-      vm.msg = '123'
+      vm.msg = '789' // 异步更新的数据
+      // console.log(vm.$el.innerHTML)
+      vm.$nextTick(() => {
+        console.log(vm.$el.innerHTML)
+      })
     </script>
   </body>
 </html>

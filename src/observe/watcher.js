@@ -1,4 +1,5 @@
 import Dep from './dep'
+import { queueWatcher } from './scheduler'
 let id = 0
 class Watcher {
   constructor(vm, fn, cb, options) {
@@ -28,8 +29,15 @@ class Watcher {
     Dep.target = null // 渲染完毕后，就将标识清空了，只有在渲染的时候才会进行依赖收集
   }
   updata() {
-    console.log('updata')
-    this.get()
+    // 每次更新数据都会同步调用这个updata方法，可以将更新的逻辑缓存起来，等会同步更新数据的逻辑执行完毕后，依次调用（去重逻辑）
+    console.log('缓存更新')
+    queueWatcher(this)
+    // 可以做异步更新
+    // this.get() vue.nextTick
+  }
+  run() {
+    console.log('真正更新')
+    this.get() // render() 取最新的vm上的数据
   }
 }
 

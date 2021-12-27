@@ -1,6 +1,7 @@
 import { compileToFunction } from './compiler/index'
 import { mountComponent } from './lifecycle'
 import { initState } from './state'
+import { nextTick } from './utils'
 
 export function initMixin(Vue) {
   // 后续组件化开发的时候，Vue.extend 可以创造子组件， 子组件可以继承Vue，子组件也可以调用_init 方法
@@ -41,4 +42,5 @@ export function initMixin(Vue) {
     }
     mountComponent(vm)
   }
+  Vue.prototype.$nextTick = nextTick
 }

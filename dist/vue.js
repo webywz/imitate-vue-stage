@@ -208,6 +208,64 @@
   }
   Dep.target = null; // 这里是一个全局的变量 window.target 静态属性
 
+  function isFunction(val) {
+    return typeof val == 'function'
+  }
+
+  function isObject(val) {
+    return typeof val == 'object' && val !== null
+  }
+
+  let callbacks = [];
+  let waiting = false;
+  function flushCallbacks() {
+    callbacks.forEach((fn) => fn());
+    callbacks = [];
+    waiting = false;
+  }
+  function nextTick(fn) {
+    // vue3里面的nextTick 就是promise , vue2里面做了一些兼容性处理
+    // return Promise.resolve().then(fn)
+    callbacks.push(fn);
+    if (!waiting) {
+      Promise.resolve().then(flushCallbacks);
+      waiting = true;
+    }
+  }
+
+  let isArray = Array.isArray;
+
+  let queue = []; // 这个存放要更新的watcher
+  let has = {};
+
+  function flushSchedulerQueue() {
+    queue.forEach((watcher) => watcher.run());
+    queue = [];
+    has = {};
+    pending = false;
+  }
+
+  let pending = false;
+  function queueWatcher(watcher) {
+    // 一般情况下，写去重，可以采用这种方式，如果你使用set的时候
+    let id = watcher.id;
+    if (has[id] == null) {
+      has[id] = true;
+      queue.push(watcher);
+      if (!pending) {
+        // 防抖 多次执行， 只走1次
+        // setTimeout(() => {
+        //   queue.forEach((watcher) => watcher.run())
+        //   queue = []
+        //   has = {}
+        //   pending = false
+        // }, 0)
+        nextTick(flushSchedulerQueue);
+        pending = true;
+      }
+    }
+  }
+
   let id = 0;
   class Watcher {
     constructor(vm, fn, cb, options) {
@@ -237,8 +295,15 @@
       Dep.target = null; // 渲染完毕后，就将标识清空了，只有在渲染的时候才会进行依赖收集
     }
     updata() {
-      console.log('updata');
-      this.get();
+      // 每次更新数据都会同步调用这个updata方法，可以将更新的逻辑缓存起来，等会同步更新数据的逻辑执行完毕后，依次调用（去重逻辑）
+      console.log('缓存更新');
+      queueWatcher(this);
+      // 可以做异步更新
+      // this.get() vue.nextTick
+    }
+    run() {
+      console.log('真正更新');
+      this.get(); // render() 取最新的vm上的数据
     }
   }
 
@@ -295,16 +360,6 @@
       vm.$el = patch(vm.$el, vnode);
     };
   }
-
-  function isFunction(val) {
-    return typeof val == 'function'
-  }
-
-  function isObject(val) {
-    return typeof val == 'object' && val !== null
-  }
-
-  let isArray = Array.isArray;
 
   let oldArrayPrototype = Array.prototype; // 获取老的数组的原型方法
 
@@ -401,6 +456,7 @@
         }
         return value // 闭包, 此value 会像上层的value进行查找
       },
+      // 一个属性可能对应多个watcher， 数组也有更新
       set(newValue) {
         // 如果设置的是一个对象,那么会再次进行劫持
         if (newValue === value) return
@@ -491,6 +547,7 @@
       }
       mountComponent(vm);
     };
+    Vue.prototype.$nextTick = nextTick;
   }
 
   // 返回虚拟节点
