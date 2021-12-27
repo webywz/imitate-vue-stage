@@ -4,6 +4,66 @@
   (global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.Vue = factory());
 })(this, (function () { 'use strict';
 
+  const defaultTagRE = /\{\{((?:.|\r?\n)+?)\}\}/g;
+  function genProps(attrs) {
+    //[key: value , key:value]
+    let str = '';
+    for (let i = 0; i < attrs.length; i++) {
+      let attr = attrs[i];
+      if (attr.name === 'style') {
+        let styles = {};
+        attr.value.replace(/([^;:]+):([^;:]+)/g, function () {
+          styles[arguments[1]] = arguments[2];
+        });
+        attr.value = styles;
+      }
+      str += `${attr.name}:${JSON.stringify(attr.value)},`;
+    }
+    return `{${str.slice(0, -1)}}`
+  }
+
+  function gen(el) {
+    if (el.type == 1) {
+      return generate(el) // 如果是元素就递归生成
+    } else {
+      let text = el.text;
+      if (!defaultTagRE.test(text)) return `_v('${text}')` // 说明就是普通文本
+      // 说明有表达式， 需要做一个表达式和普通值的拼接_v['aaa',_s(msg),'bbbb'].join('+')
+      // _v('aaa' + _s(msg)+'bbb')
+      let lastIndex = (defaultTagRE.lastIndex = 0);
+      let tokens = [];
+      let match;
+      while ((match = defaultTagRE.exec(text))) {
+        // 如果正则 + g 配合exec 就会有一个lastIndex 的问题
+        let index = match.index;
+        if (index > lastIndex) {
+          tokens.push(JSON.stringify(text.slice(lastIndex, index)));
+        }
+        tokens.push(`_s(${match[1].trim()})`);
+        lastIndex = index + match[0].length;
+      }
+      if (lastIndex < text.length) {
+        tokens.push(JSON.stringify(text.slice(lastIndex)));
+      }
+      return `_v(${tokens.join('+')})`
+    }
+  }
+
+  function genChildren(el) {
+    let children = el.children;
+    if (children) {
+      return children.map((item) => gen(item)).join(',')
+    }
+    return false
+  }
+  function generate(ast) {
+    let children = genChildren(ast);
+    let code = `_c('${ast.tag}', ${ast.attrs.length ? genProps(ast.attrs) : 'undefined'}${
+    children ? `,${children}` : ''
+  })`;
+    return code
+  }
+
   const ncname = `[a-zA-z_][\\-\\.0-9_a-zA-Z]*`;
   const qnameCapture = `((?:${ncname}\\:)?${ncname})`;
   const startTagOpen = new RegExp(`^<${qnameCapture}`); // 标签开头的正则， 捕获的内容是标签名
@@ -111,16 +171,61 @@
 
   function compileToFunction(template) {
     // 1.将模板变成ast语法树
-    parserHTML(template);
+    let ast = parserHTML(template);
     // console.log(ast)
     // 代码优化 标记静态节点
 
     // 代码生成
-
+    let code = generate(ast);
+    let render = new Function(`with(this){return ${code}}`);
+    return render
     // 1. 编译原理
     // 2.响应式原理 依赖搜集
     // 3.组件化开发（贯穿了vue的流程）
     // 4.diff算法
+  }
+
+  function patch(el, vnode) {
+    const elm = createElm(vnode); // 根据虚拟节点创造了真实节点
+    const parentNode = el.parentNode;
+    parentNode.insertBefore(elm, el.nextSibling);
+    console.log(parentNode);
+    parentNode.removeChild(elm);
+  }
+
+  function createElm(vnode) {
+    let { tag, data, children, text, vm } = vnode;
+    // 让虚拟节点和真实节点做映射关系, 后续某个节点更新了,可以跟踪到真实节点,并且更新真实节点
+    if (typeof tag === 'string') {
+      vnode.el = document.createElement(tag);
+      updataProperties(vnode.el, data);
+      children.forEach((child) => {
+        let childs = createElm(child);
+        vnode.el.appendChild(childs);
+      });
+    } else {
+      vnode.el = document.createTextNode(text);
+    }
+    return vnode.el
+  }
+
+  // 后续写diff算法的时候 在完善
+  function updataProperties(el, props = {}) {
+    for (let key in props) {
+      el.setAttribute(key, props[key]);
+    }
+  }
+
+  function mountComponent(vm) {
+    vm._updata(vm._render());
+  }
+
+  function lifeCycleMixin(Vue) {
+    Vue.prototype._updata = function (vnode) {
+      // 采用 先序深度遍历, 创建节点,(遇到节点就创造节点,递归创建)
+      const vm = this;
+      vm.$el = patch(vm.$el, vnode);
+    };
   }
 
   function isFunction(val) {
@@ -310,6 +415,54 @@
         let render = compileToFunction(el.outerHTML);
         opts.render = render;
       }
+      mountComponent(vm);
+    };
+  }
+
+  // 返回虚拟节点
+  function createElement(vm, tag, data = {}, ...children) {
+    return vnode(vm, tag, data, children, data.key, undefined)
+  }
+
+  function createText(vm, text) {
+    return vnode(vm, undefined, undefined, undefined, undefined, text)
+  }
+
+  function vnode(vm, tag, data, children, key, text) {
+    return {
+      vm,
+      tag,
+      children,
+      data,
+      key,
+      text
+    }
+  }
+
+  function renderMixin(Vue) {
+    // createElement 创建元素型节点
+    Vue.prototype._c = function () {
+      const vm = this;
+      return createElement(vm, ...arguments)
+    };
+    // 创建文本的虚拟节点
+    Vue.prototype._v = function (text) {
+      const vm = this;
+      return createText(vm, text) // 描述虚拟节点是属于哪个实例
+    };
+    // JSON.stringify
+    Vue.prototype._s = function (val) {
+      if (isObject(val)) {
+        return JSON.stringify(val)
+      } else {
+        return val
+      }
+    };
+    Vue.prototype._render = function () {
+      const vm = this;
+      let { render } = vm.$options;
+      let vnode = render.call(vm);
+      return vnode
     };
   }
 
@@ -319,6 +472,8 @@
     this._init(options);
   }
   initMixin(Vue);
+  renderMixin(Vue);
+  lifeCycleMixin(Vue);
 
   // 1.new Vue 会调用_init方法进行初始化
   // 2.会将用户的选项放到vm.$options 上

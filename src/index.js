@@ -1,11 +1,14 @@
 import { initMixin } from './init'
+import { lifeCycleMixin } from './lifecycle'
+import { renderMixin } from './render'
 // vue 要如何实现， 原型模式， 所有的功能都能通过原型扩展的方式来添加
 function Vue(options) {
   // 实现vue的初始化
   this._init(options)
 }
 initMixin(Vue)
-
+renderMixin(Vue)
+lifeCycleMixin(Vue)
 export default Vue
 
 // 1.new Vue 会调用_init方法进行初始化
