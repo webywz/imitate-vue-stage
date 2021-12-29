@@ -4,6 +4,82 @@
   (global = typeof globalThis !== 'undefined' ? globalThis : global || self, global.Vue = factory());
 })(this, (function () { 'use strict';
 
+  function isFunction(val) {
+    return typeof val == 'function'
+  }
+
+  function isObject(val) {
+    return typeof val == 'object' && val !== null
+  }
+
+  let callbacks = [];
+  let waiting = false;
+  function flushCallbacks() {
+    callbacks.forEach((fn) => fn());
+    callbacks = [];
+    waiting = false;
+  }
+  function nextTick(fn) {
+    // vue3里面的nextTick 就是promise , vue2里面做了一些兼容性处理
+    // return Promise.resolve().then(fn)
+    callbacks.push(fn);
+    if (!waiting) {
+      Promise.resolve().then(flushCallbacks);
+      waiting = true;
+    }
+  }
+
+  let isArray = Array.isArray;
+
+  // {} {beforeCreate: fn} => {beforeCreate: [fn]}
+  // {beforeCreate: [fn]} {beforeCreate: fn} => {beforeCreate: [fn, fn]}
+
+  let strats = {}; // 存放所有策略
+  let lifeCycle = ['beforeCreate', 'created', 'beforeMount', 'mounted'];
+  lifeCycle.forEach((hook) => {
+    strats[hook] = function (parentVal, childVal) {
+      if (childVal) {
+        if (parentVal) {
+          // 父子都有值 ，用父和子拼接在一起 ， 父有值就一直是数组
+          return parentVal.concat(childVal)
+        } else {
+          return [childVal] // 如果没值就变成数组
+        }
+      } else {
+        return parentVal
+      }
+    };
+  });
+  function mergeOptions(parentVal, childVal) {
+    const options = {};
+    for (const key in parentVal) {
+      mergeFiled(key);
+    }
+    for (const key in childVal) {
+      if (!parentVal.hasOwnProperty(key)) {
+        mergeFiled(key);
+      }
+    }
+    function mergeFiled(key) {
+      // 设计模式   策略模式
+      let strat = strats[key];
+      if (strat) {
+        options[key] = strat(parentVal[key], childVal[key]); // 合并两个值
+      } else {
+        options[key] = childVal[key] || parentVal[key];
+      }
+    }
+    return options
+  }
+
+  function initGlobalApi(Vue) {
+    Vue.options = {}; // 全局属性，在每个组件初始化的时候，将这些属性放到每个组件上
+    Vue.mixin = function (options) {
+      this.options = mergeOptions(this.options, options);
+      return this
+    };
+  }
+
   const defaultTagRE = /\{\{((?:.|\r?\n)+?)\}\}/g;
   function genProps(attrs) {
     //[key: value , key:value]
@@ -208,33 +284,6 @@
   }
   Dep.target = null; // 这里是一个全局的变量 window.target 静态属性
 
-  function isFunction(val) {
-    return typeof val == 'function'
-  }
-
-  function isObject(val) {
-    return typeof val == 'object' && val !== null
-  }
-
-  let callbacks = [];
-  let waiting = false;
-  function flushCallbacks() {
-    callbacks.forEach((fn) => fn());
-    callbacks = [];
-    waiting = false;
-  }
-  function nextTick(fn) {
-    // vue3里面的nextTick 就是promise , vue2里面做了一些兼容性处理
-    // return Promise.resolve().then(fn)
-    callbacks.push(fn);
-    if (!waiting) {
-      Promise.resolve().then(flushCallbacks);
-      waiting = true;
-    }
-  }
-
-  let isArray = Array.isArray;
-
   let queue = []; // 这个存放要更新的watcher
   let has = {};
 
@@ -343,14 +392,17 @@
       vm._updata(vm._render());
     };
 
+    callHook(vm, 'beforeCreate');
     new Watcher(
       vm,
       updataComponent,
       () => {
         console.log('后续增添更新钩子函数 updata');
+        callHook(vm, 'create');
       },
       true
     );
+    callHook(vm, 'mounted');
   }
 
   function lifeCycleMixin(Vue) {
@@ -359,6 +411,15 @@
       const vm = this;
       vm.$el = patch(vm.$el, vnode);
     };
+  }
+
+  function callHook(vm, hook) {
+    let handlers = vm.$options[hook];
+    if (handlers) {
+      handlers.forEach((fn) => {
+        fn.call(vm); // 生命周期的this 永远指向实例
+      });
+    }
   }
 
   let oldArrayPrototype = Array.prototype; // 获取老的数组的原型方法
@@ -391,6 +452,7 @@
       if (inserted) {
         ob.observeArray(inserted);
       }
+      ob.dep.notify(); // 触发页面更新流程
     };
   });
 
@@ -410,6 +472,8 @@
       // 不让__ob__ 被遍历到
       // value.__ob__ = this // 给对象和数组添加一个自定义属性
 
+      // 如果给一个对象添加一个不存在的属性，我希望也能更新视图{}.dep
+      this.dep = new Dep(); // 给对象和数组都增加dep属性
       Object.defineProperty(value, '__ob__', {
         value: this,
         enumerable: false //表示这个属性不能被列举出来，不能被循环到
@@ -419,6 +483,8 @@
         // 更改数组原型方法, 如果是数组,就重写数组的原型链
         value.__proto__ = arrayMethods; // 重写数组方法
         this.observeArray(value);
+
+        // 数组如何依赖收集，数组更新的时候，如何触发更新
       } else {
         this.walk(value); // 核心就是循环对象
       }
@@ -444,8 +510,22 @@
   // 3) 不要频繁获取数据
   // 4)如果数据不需要响应式,可以使用Object.freeze 冻结属性
 
+  function dependArray(value) {
+    // 让数组的引用类型都收集依赖
+    for (let i = 0; i < value.length; i++) {
+      let current = value[i];
+      current.__ob__ && current.__ob__.dep.depend();
+      if (Array.isArray(current)) {
+        dependArray(current);
+      }
+    }
+  }
+
   function defineReactive(obj, key, value) {
-    observe(value); // 递归进行观测数据. 不管有多少层,我都进行defineProperty
+    let childOb = observe(value); // 递归进行观测数据. 不管有多少层,我都进行defineProperty
+    //childOb 如果有值 那么就是数组或对象
+    // 数组的dep
+
     // vue2 慢的原因 主要在这个方法中
     let dep = new Dep(); // 每个属性都增加一个dep
     Object.defineProperty(obj, key, {
@@ -453,7 +533,16 @@
         // debugger
         if (Dep.target) {
           dep.depend();
+          if (childOb) {
+            // 取属性的时候，会对对应的值（对象本身和数组）进行依赖收集
+            childOb.dep.depend(); // 让数组和对象也记住当前的watcher
+            if (Array.isArray(value)) {
+              // 可能是数组套数组的可能
+              dependArray(value);
+            }
+          }
         }
+
         return value // 闭包, 此value 会像上层的value进行查找
       },
       // 一个属性可能对应多个watcher， 数组也有更新
@@ -478,6 +567,14 @@
     // 如果一个数据已经被观测过了, 就不要在进行观测了, 用类来实现, 观测过就增加一个标识,再观测的时候,可以先检测是否观测过,观测过了就跳过检测
     return new Observer(value)
   }
+
+  // 1.默认vue在初始化的时候，会对对象每一个属性都进行劫持， 增加dep属性，当取值的时候会做依赖收集
+  // 2.默认还会对属性值是（对象和数组的本身进行增加dep属性） 进行依赖收集
+  // 3.如果是属性变化 触发属性对应的dep去更新
+  // 4.如果是数组更新，触发数组的本身的dep 进行更新
+  // 5.如果是数组还要 让数组中的对象类型也进行依赖收集（递归依赖收集）
+
+  // 6.如果数组里面放对象，默认对象里的属性是会进行依赖收集的，因为在取值时，会进行JSON.stringify操作
 
   function initState(vm) {
     const opts = vm.$options;
@@ -516,7 +613,7 @@
     Vue.prototype._init = function (options) {
       const vm = this;
       // 把用户的选项放vm上， 这样在其他方法中都可以获取到options
-      vm.$options = options;
+      vm.$options = mergeOptions(vm.constructor.options, options);
 
       //$options选项
       // options 中是用户传入的数据 el， data
@@ -605,6 +702,7 @@
   initMixin(Vue);
   renderMixin(Vue);
   lifeCycleMixin(Vue);
+  initGlobalApi(Vue);
 
   // 1.new Vue 会调用_init方法进行初始化
   // 2.会将用户的选项放到vm.$options 上
