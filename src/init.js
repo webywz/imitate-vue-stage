@@ -1,14 +1,14 @@
 import { compileToFunction } from './compiler/index'
 import { mountComponent } from './lifecycle'
 import { initState } from './state'
-import { nextTick } from './utils'
+import { mergeOptions, nextTick } from './utils'
 
 export function initMixin(Vue) {
   // 后续组件化开发的时候，Vue.extend 可以创造子组件， 子组件可以继承Vue，子组件也可以调用_init 方法
   Vue.prototype._init = function (options) {
     const vm = this
     // 把用户的选项放vm上， 这样在其他方法中都可以获取到options
-    vm.$options = options
+    vm.$options = mergeOptions(vm.constructor.options, options)
 
     //$options选项
     // options 中是用户传入的数据 el， data

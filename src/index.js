@@ -1,3 +1,4 @@
+import { initGlobalApi } from './global-api/index'
 import { initMixin } from './init'
 import { lifeCycleMixin } from './lifecycle'
 import { renderMixin } from './render'
@@ -9,6 +10,7 @@ function Vue(options) {
 initMixin(Vue)
 renderMixin(Vue)
 lifeCycleMixin(Vue)
+initGlobalApi(Vue)
 export default Vue
 
 // 1.new Vue 会调用_init方法进行初始化
