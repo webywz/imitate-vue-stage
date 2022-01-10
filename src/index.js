@@ -1,7 +1,9 @@
+import { compileToFunction } from './compiler/index'
 import { initGlobalApi } from './global-api/index'
 import { initMixin } from './init'
 import { lifeCycleMixin } from './lifecycle'
 import { renderMixin } from './render'
+import { createElm, patch } from './vdom/patch'
 // vue 要如何实现， 原型模式， 所有的功能都能通过原型扩展的方式来添加
 function Vue(options) {
   // 实现vue的初始化
@@ -11,6 +13,32 @@ initMixin(Vue)
 renderMixin(Vue)
 lifeCycleMixin(Vue)
 initGlobalApi(Vue)
+
+// 先生成一个虚拟节点
+let vm1 = new Vue({
+  data() {
+    return {
+      name: 'jw'
+    }
+  }
+})
+let render1 = compileToFunction(`<div style="color: blue;">{{name}}</div>`)
+let oldVnode = render1.call(vm1)
+let el1 = createElm(oldVnode)
+document.body.appendChild(el1)
+// 在生成一个新的虚拟节点， patch
+let vm2 = new Vue({
+  data() {
+    return {
+      name: 'zf'
+    }
+  }
+})
+let render2 = compileToFunction(`<div style="color: red;">{{name}}</div>`)
+let newVnode = render2.call(vm2)
+setTimeout(() => {
+  patch(oldVnode, newVnode) // 比对两个虚拟节点差异，更新需要更新的地方
+}, 2000)
 export default Vue
 
 // 1.new Vue 会调用_init方法进行初始化

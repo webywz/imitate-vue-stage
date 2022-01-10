@@ -37,7 +37,12 @@ lifeCycle.forEach((hook) => {
         // 父子都有值 ，用父和子拼接在一起 ， 父有值就一直是数组
         return parentVal.concat(childVal)
       } else {
-        return [childVal] // 如果没值就变成数组
+        // 儿子有值，父没有值
+        if (isArray(childVal)) {
+          return childVal
+        } else {
+          return [childVal] // 如果没值就变成数组
+        }
       }
     } else {
       return parentVal

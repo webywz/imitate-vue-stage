@@ -7,50 +7,6 @@
     <title>Vue</title>
   </head>
   <body>
-    <div id="app">
-      <p>{{arr}}</p>
-    </div>
     <script src="./vue.js"></script>
-    <script>
-      // 一般常见的情况  给所有的组件， 都增加一些生命周期
-      // vue中的生命周期怎么实现的？ 钩子方法（回调）
-      Vue.mixin({
-        beforeCreate() {
-          console.log('全局的1')
-        }
-      })
-      Vue.mixin({
-        beforeCreate() {
-          console.log('全局的2')
-        }
-      })
-      let vm = new Vue({
-        el: '#app',
-        // 生命周期的合并，需要将2个生命周期进行合并操作
-        beforeCreate: [
-          function () {
-            console.log('局部第一个') //A模块
-          },
-          function () {
-            console.log('局部第二个') //B模块
-          }
-        ],
-        data() {
-          return {
-            msg: 'hello1',
-            abc: 'abc',
-            arr: []
-          }
-        }
-      })
-      console.log(vm.$options)
-      // vm.arr.push(100)
-      // vm.arr[0].xx = 200
-      // vm.msg = '789' // 异步更新的数据
-      // console.log(vm.$el.innerHTML)
-      // vm.$nextTick(() => {
-      //   console.log(vm.$el.innerHTML)
-      // })
-    </script>
   </body>
 </html>
