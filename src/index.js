@@ -22,7 +22,12 @@ let vm1 = new Vue({
     }
   }
 })
-let render1 = compileToFunction(`<div style="color: blue;">{{name}}</div>`)
+let render1 = compileToFunction(`<div>
+  <li key="A">A</li>
+  <li key="B">B</li>
+  <li key="C">C</li>
+  <li key="D">D</li>
+</div>`)
 let oldVnode = render1.call(vm1)
 let el1 = createElm(oldVnode)
 document.body.appendChild(el1)
@@ -34,7 +39,20 @@ let vm2 = new Vue({
     }
   }
 })
-let render2 = compileToFunction(`<div style="color: red;">{{name}}</div>`)
+{
+  /* <li key="F" style="color: green;">F</li>
+  <li key="B" style="color: grey;">B</li>
+  <li key="A" style="color: red;">A</li>
+  <li key="E" style="color: blue;">E</li>
+  <li key="P" style="color: blue;">P</li> */
+}
+let render2 = compileToFunction(`<div>
+<li key="F">F</li>
+<li key="B">B</li>
+<li key="A">A</li>
+<li key="E">E</li>
+<li key="P">P</li>
+</div>`)
 let newVnode = render2.call(vm2)
 setTimeout(() => {
   patch(oldVnode, newVnode) // 比对两个虚拟节点差异，更新需要更新的地方
