@@ -7,6 +7,20 @@
     <title>Vue</title>
   </head>
   <body>
+    <div id="app">
+      <span>{{name}}</span>
+    </div>
     <script src="./vue.js"></script>
+    <script>
+      let vm = new Vue({
+        el: '#app',
+        data() {
+          return { name: 'DK' }
+        }
+      })
+      setTimeout(() => {
+        vm.name = 'VSPN'
+      }, 1000)
+    </script>
   </body>
 </html>

@@ -429,6 +429,7 @@
         // 新老都有儿子节点
         updataChildren(el, oldChildren, newChildren);
       }
+      return el
     }
   }
 
@@ -595,9 +596,15 @@
     Vue.prototype._updata = function (vnode) {
       // 采用 先序深度遍历, 创建节点,(遇到节点就创造节点,递归创建)
       const vm = this;
+      let preVnode = vm._preVnode;
       // 第一次渲染是根据虚拟节点，生成真实节点，替换原来的节点
+      vm._preVnode = vnode;
       // 第二次，生成一个新的虚拟节点，和老的虚拟节点进行对比
-      vm.$el = patch(vm.$el, vnode);
+      if (!preVnode) {
+        vm.$el = patch(vm.$el, vnode);
+      } else {
+        vm.$el = patch(preVnode, vnode);
+      }
     };
   }
 
@@ -871,43 +878,6 @@
   renderMixin(Vue);
   lifeCycleMixin(Vue);
   initGlobalApi(Vue);
-
-  // 先生成一个虚拟节点
-  let vm1 = new Vue({
-    data() {
-      return {
-        name: 'jw'
-      }
-    }
-  });
-  let render1 = compileToFunction(`<div>
-  <li key="A">A</li>
-  <li key="B">B</li>
-  <li key="C">C</li>
-  <li key="D">D</li>
-</div>`);
-  let oldVnode = render1.call(vm1);
-  let el1 = createElm(oldVnode);
-  document.body.appendChild(el1);
-  // 在生成一个新的虚拟节点， patch
-  let vm2 = new Vue({
-    data() {
-      return {
-        name: 'zf'
-      }
-    }
-  });
-  let render2 = compileToFunction(`<div>
-<li key="F">F</li>
-<li key="B">B</li>
-<li key="A">A</li>
-<li key="E">E</li>
-<li key="P">P</li>
-</div>`);
-  let newVnode = render2.call(vm2);
-  setTimeout(() => {
-    patch(oldVnode, newVnode); // 比对两个虚拟节点差异，更新需要更新的地方
-  }, 2000);
 
   // 1.new Vue 会调用_init方法进行初始化
   // 2.会将用户的选项放到vm.$options 上

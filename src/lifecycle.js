@@ -23,9 +23,15 @@ export function lifeCycleMixin(Vue) {
   Vue.prototype._updata = function (vnode) {
     // 采用 先序深度遍历, 创建节点,(遇到节点就创造节点,递归创建)
     const vm = this
+    let preVnode = vm._preVnode
     // 第一次渲染是根据虚拟节点，生成真实节点，替换原来的节点
+    vm._preVnode = vnode
     // 第二次，生成一个新的虚拟节点，和老的虚拟节点进行对比
-    vm.$el = patch(vm.$el, vnode)
+    if (!preVnode) {
+      vm.$el = patch(vm.$el, vnode)
+    } else {
+      vm.$el = patch(preVnode, vnode)
+    }
   }
 }
 

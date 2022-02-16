@@ -42,6 +42,7 @@ export function patch(oldVnode, vnode) {
       // 新老都有儿子节点
       updataChildren(el, oldChildren, newChildren)
     }
+    return el
   }
 }
 
