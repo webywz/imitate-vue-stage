@@ -1,6 +1,11 @@
 import { isSameVnode } from '../vdom/index'
 
 export function patch(oldVnode, vnode) {
+  if (!oldVnode) {
+    // 组件的挂载流程
+    return createElm(vnode) // 产生组件的真实节点
+  }
+
   const isRealElement = oldVnode.nodeType
 
   if (isRealElement) {
@@ -135,15 +140,30 @@ function updataChildren(el, oldChildren, newChildren) {
   }
 }
 
+function createComponent(vnode) {
+  // 给组件预留一个初始化流程init
+  let i = vnode.data
+  if ((i = i.hook) && (i = i.init)) {
+    i(vnode)
+  }
+  if (vnode.componentInstance) {
+    // 说明是组件
+    return true
+  }
+}
+
 export function createElm(vnode) {
   let { tag, data, children, text, vm } = vnode
   // 让虚拟节点和真实节点做映射关系, 后续某个节点更新了,可以跟踪到真实节点,并且更新真实节点
   if (typeof tag === 'string') {
+    if (createComponent(vnode)) {
+      return vnode.componentInstance.$el
+    }
     vnode.el = document.createElement(tag)
     updataProperties(vnode)
+    debugger
     children.forEach((child) => {
-      let childs = createElm(child)
-      vnode.el.appendChild(childs)
+      vnode.el.appendChild(createElm(child))
     })
   } else {
     vnode.el = document.createTextNode(text)

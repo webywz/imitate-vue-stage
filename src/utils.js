@@ -49,6 +49,19 @@ lifeCycle.forEach((hook) => {
     }
   }
 })
+
+strats.components = function (parentVal, childVal) {
+  let res = Object.create(parentVal)
+
+  if (childVal) {
+    // 合并后产生新对象，不用原来的
+    for (let key in childVal) {
+      res[key] = childVal[key]
+    }
+  }
+  return res
+}
+
 export function mergeOptions(parentVal, childVal) {
   const options = {}
   for (const key in parentVal) {
@@ -70,3 +83,18 @@ export function mergeOptions(parentVal, childVal) {
   }
   return options
 }
+
+function makeMap(str) {
+  let tagList = str.split(',')
+  return function (tagName) {
+    return tagList.includes(tagName)
+  }
+}
+
+export const isReservedTag = makeMap(
+  'template,script,style,element,content,slot,link,meta,svg,view,button,' +
+    'a,div,img,image,text,span,input,switch,textarea,spinner,select,' +
+    'slider,slider-neighbor,indicator,canvas,' +
+    'list,cell,header,loading,loading-indicator,refresh,scrollable,scroller,' +
+    'video,web,embed,tabbar,tabheader,datepicker,timepicker,marquee,countdown'
+)

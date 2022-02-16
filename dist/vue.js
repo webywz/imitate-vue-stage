@@ -236,6 +236,19 @@
       }
     };
   });
+
+  strats.components = function (parentVal, childVal) {
+    let res = Object.create(parentVal);
+
+    if (childVal) {
+      // 合并后产生新对象，不用原来的
+      for (let key in childVal) {
+        res[key] = childVal[key];
+      }
+    }
+    return res
+  };
+
   function mergeOptions(parentVal, childVal) {
     const options = {};
     for (const key in parentVal) {
@@ -258,11 +271,52 @@
     return options
   }
 
+  function makeMap(str) {
+    let tagList = str.split(',');
+    return function (tagName) {
+      return tagList.includes(tagName)
+    }
+  }
+
+  const isReservedTag = makeMap(
+    'template,script,style,element,content,slot,link,meta,svg,view,button,' +
+      'a,div,img,image,text,span,input,switch,textarea,spinner,select,' +
+      'slider,slider-neighbor,indicator,canvas,' +
+      'list,cell,header,loading,loading-indicator,refresh,scrollable,scroller,' +
+      'video,web,embed,tabbar,tabheader,datepicker,timepicker,marquee,countdown'
+  );
+
   function initGlobalApi(Vue) {
     Vue.options = {}; // 全局属性，在每个组件初始化的时候，将这些属性放到每个组件上
     Vue.mixin = function (options) {
       this.options = mergeOptions(this.options, options);
       return this
+    };
+    Vue.options._base = Vue;
+    // 通过Vue.extend 方法可以产生一个子类，new子类的时候会执行代码初始化流程（组件的初始化）
+    Vue.extend = function (opt) {
+      // 会产生一个子类
+      const Super = this;
+      const Sub = function (options) {
+        // 创造一个组件，就是new这个组件的类（组件初始化）
+        this._init(options);
+      };
+      Sub.prototype = Object.create(Super.prototype); // 继承原型方法
+      Sub.prototype.constructor = Sub; // Object.create 会产生一个新的实例作为子类的原型，此时constructor会指向错误
+      Sub.options = mergeOptions(Super.options, opt);
+      // Sub.mixin = Vue.mixin
+      // ....
+      return Sub
+    };
+    Vue.options.components = {};
+    Vue.component = function (id, definition) {
+      // definition可以传入对象或函数
+      let name = definition.name || id;
+      definition.name = name;
+      if (isObject(definition)) {
+        definition = Vue.extend(definition);
+      }
+      Vue.options.components[name] = definition;
     };
   }
 
@@ -361,8 +415,33 @@
     }
   }
 
+  function createComponent$1(vm, tag, data, children, key, Ctor) {
+    if (isObject(Ctor)) {
+      //组件的定义一定是通过Vue.extend 进行包裹的
+      Ctor = vm.$options._base.extend(Ctor);
+    }
+
+    data.hook = {
+      // 组件的生命周期
+      init(vnode) {
+        // vnode.componentInstance.$el -> 对应组件渲染后的结果
+        let child = (vnode.componentInstance = new Ctor({})); // 获取组件的真实dom
+        child.$mount();
+        // mount 挂载完毕后，会产生一个真实节点，这个节点在vm.$el 上 => 对应的就是组件的真实内容
+      }
+    };
+    let componentVnode = vnode(vm, tag, data, undefined, key, undefined, { Ctor, children, tag }); // componentOptions 存放了一个重要的属性
+    return componentVnode
+  }
+
   // 返回虚拟节点
   function createElement(vm, tag, data = {}, ...children) {
+    // 如何区分是组件还是元素节点？
+    if (!isReservedTag(tag)) {
+      let Ctor = vm.$options.components[tag];
+      return createComponent$1(vm, tag, data, children, data.key, Ctor)
+    }
+
     return vnode(vm, tag, data, children, data.key, undefined)
   }
 
@@ -376,18 +455,24 @@
     return newVnode.tag == oldVnode.tag && newVnode.key == oldVnode.key
   }
 
-  function vnode(vm, tag, data, children, key, text) {
+  function vnode(vm, tag, data, children, key, text, options) {
     return {
       vm,
       tag,
       children,
       data,
       key,
-      text
+      text,
+      componentOptions: options
     }
   }
 
   function patch(oldVnode, vnode) {
+    if (!oldVnode) {
+      // 组件的挂载流程
+      return createElm(vnode) // 产生组件的真实节点
+    }
+
     const isRealElement = oldVnode.nodeType;
 
     if (isRealElement) {
@@ -522,15 +607,30 @@
     }
   }
 
+  function createComponent(vnode) {
+    // 给组件预留一个初始化流程init
+    let i = vnode.data;
+    if ((i = i.hook) && (i = i.init)) {
+      i(vnode);
+    }
+    if (vnode.componentInstance) {
+      // 说明是组件
+      return true
+    }
+  }
+
   function createElm(vnode) {
     let { tag, data, children, text, vm } = vnode;
     // 让虚拟节点和真实节点做映射关系, 后续某个节点更新了,可以跟踪到真实节点,并且更新真实节点
     if (typeof tag === 'string') {
+      if (createComponent(vnode)) {
+        return vnode.componentInstance.$el
+      }
       vnode.el = document.createElement(tag);
       updataProperties(vnode);
+      debugger
       children.forEach((child) => {
-        let childs = createElm(child);
-        vnode.el.appendChild(childs);
+        vnode.el.appendChild(createElm(child));
       });
     } else {
       vnode.el = document.createTextNode(text);
@@ -808,8 +908,8 @@
     Vue.prototype._init = function (options) {
       const vm = this;
       // 把用户的选项放vm上， 这样在其他方法中都可以获取到options
+      // 因为全局定义的内容，会混合在当前实例上
       vm.$options = mergeOptions(vm.constructor.options, options);
-
       //$options选项
       // options 中是用户传入的数据 el， data
       initState(vm);
@@ -833,8 +933,11 @@
 
       if (!opts.render) {
         // 模板编译
-        opts.template;
-        let render = compileToFunction(el.outerHTML);
+        let template = opts.template;
+        if (!template) {
+          template = el.outerHTML;
+        }
+        let render = compileToFunction(template);
         opts.render = render;
       }
       mountComponent(vm);
@@ -900,6 +1003,13 @@
   //2.当视图渲染的时候，会取data中的数据，会走每个属性的get方法，就让这个属性的dep记录watcher
   //3.同时让watcher 也记住dep （这个逻辑目前没用到）dep和watcher 是多对多的关系，因为一个属性可能对应多个视图，一个视图对应多个数据
   //4.如果数据发生变化，会通知对应属性的dep ，依次通知存放的watcher去更新
+
+  // 1. Vue.component 注册成全局组件，内部会自动调用Vue.extend方法，返回组件的构造函数
+  // 2. 组件初始化的时候，会做成一个合并mergeOptions（自己的组件.__proto__ = 全局组件）
+  // 3. 内部会对模板进行编译操作_c（组件名字）做筛查，如果是组件就创造一个组件的虚拟节点，还会判断Ctor如果是对象会调用Vue.extend， 所有的组件都是通过Vue.extend方法来实现的（componentOptions里面放着组件的所有内容 属性的实现， 事件的实现，插槽的内容，Ctor）
+  // 4. 创建组件的真实节点，（new Ctor 拿到组件实例， 并且调用组件的$mount 方法 （会生成一个$el 对应组件模板渲染后的结果）） vnode.componentInstance = new Ctor() vnode.componentInstance => 组件渲染后结果
+  // 5. 将组件的vnode.componentInstance.$el 插入到父标签中
+  // 6. 组件在new Ctor()时 会进行组件的初始化， 给组件再次添加一个独立的渲染watcher（每个组件都有自己的watcher）更新时。只需要更新自己组件对用的渲染watcher（因为组件渲染时组件对用的属性会收集自己的渲染watcher
 
   return Vue;
 

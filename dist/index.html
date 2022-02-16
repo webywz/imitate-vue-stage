@@ -7,20 +7,33 @@
     <title>Vue</title>
   </head>
   <body>
+    <!-- ast -> render -> _c -->
     <div id="app">
-      <span>{{name}}</span>
+      <my-button></my-button>
     </div>
     <script src="./vue.js"></script>
     <script>
-      let vm = new Vue({
+      Vue.component('my-button', {
+        template: '<button>你好</button>'
+      })
+      new Vue({
         el: '#app',
-        data() {
-          return { name: 'DK' }
+        components: {
+          'my-button': {
+            template: ' <div><button>不好, {{name}}</button><xxx></xxx></div>',
+            components: {
+              xxx: {
+                template: '<span>牛牛牛牛牛</span>'
+              }
+            },
+            data() {
+              return {
+                name: 'VSPN'
+              }
+            }
+          }
         }
       })
-      setTimeout(() => {
-        vm.name = 'VSPN'
-      }, 1000)
     </script>
   </body>
 </html>
